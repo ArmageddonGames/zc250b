@@ -2,11 +2,8 @@
 #include <assert.h>
 #include "ParseError.h"
 
-void BuildOpcodes::caseDefault(void *param)
+void BuildOpcodes::caseDefault(void *)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  param=param;
-
 	//unreachable
 	assert(false);
 }
@@ -67,26 +64,27 @@ void BuildOpcodes::caseArrayDecl(ASTArrayDecl &host, void *param)
 	OpcodeContext *c = (OpcodeContext *)param;
 	pair<string, string> t = host.getSize()->parseValue();
 	pair<long, bool> t2 = ScriptParser::parseLong(t);
-	if(t2.first < 10000) 
+	if(t2.first < 10000)
 	{
 		printErrorMsg(&host, ARRAYTOOSMALL, host.getSize()->getValue());
 		t2.first = 10000;
 	}
-	if(t2.first > 0x8000*10000) 
+	if(t2.first > 0x8000*10000)
 	{
 		printErrorMsg(&host, ARRAYTOOLARGE, host.getSize()->getValue());
 		t2.first = 0x8000*10000;
 	}
 	int globalid = c->linktable->getGlobalID(c->symbols->getID(&host));
-	result.push_back(new OAllocateMemImmediate(new VarArgument(EXP1), new LiteralArgument(t2.first)));
 	if(globalid != -1)
 	{
+		result.push_back(new OAllocateGlobalMem(new VarArgument(EXP1), new LiteralArgument(t2.first)));
 		//it's a global array. Check if it has been initialized and then act accordingly
 		result.push_back(new OSetRegister(new GlobalArgument(globalid), new VarArgument(EXP1)));
 		RAMtype = GLOBALRAM;
 	}
 	else
 	{
+		result.push_back(new OAllocateMemImmediate(new VarArgument(EXP1), new LiteralArgument(t2.first)));
 		int offset = c->stackframe->getOffset(c->symbols->getID(&host));
 		result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 		result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(offset)));
@@ -681,11 +679,11 @@ void BuildOpcodes::caseBlock(ASTBlock &host, void *param)
 			}
 		}
 	}
-	for(list<long>::iterator it = host.getArrayRefs()->begin(); it != host.getArrayRefs()->end(); it++)
+	for(list<long>::reverse_iterator it = host.getArrayRefs()->rbegin(); it != host.getArrayRefs()->rend(); it++)
     {
 	  result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 	  result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(*it)));
-	  result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP))); 
+	  result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP)));
 	  result.push_back(new ODeallocateMemRegister(new VarArgument(EXP2)));
 	  arrayRefs.pop_back();
     }
@@ -845,11 +843,11 @@ void BuildOpcodes::caseStmtReturn(ASTStmtReturn &host, void *param)
   temp=&host;
   param=param;
 
-  for(list<long>::iterator it = arrayRefs.begin(); it != arrayRefs.end(); it++)
+  for(list<long>::reverse_iterator it = arrayRefs.rbegin(); it != arrayRefs.rend(); it++)
   {
     result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 	result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(*it)));
-	result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP))); 
+	result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP)));
 	result.push_back(new ODeallocateMemRegister(new VarArgument(EXP2)));
   }
   result.push_back(new OGotoImmediate(new LabelArgument(returnlabelid)));
@@ -858,11 +856,11 @@ void BuildOpcodes::caseStmtReturn(ASTStmtReturn &host, void *param)
 void BuildOpcodes::caseStmtReturnVal(ASTStmtReturnVal &host, void *param)
 {
 	host.getReturnValue()->execute(*this,param);
-	for(list<long>::iterator it = arrayRefs.begin(); it != arrayRefs.end(); it++)
+	for(list<long>::reverse_iterator it = arrayRefs.rbegin(); it != arrayRefs.rend(); it++)
 	{
 		result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 	    result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(*it)));
-	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP))); 
+	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP)));
 		result.push_back(new ODeallocateMemRegister(new VarArgument(EXP2)));
 	}
 	result.push_back(new OGotoImmediate(new LabelArgument(returnlabelid)));
@@ -905,11 +903,11 @@ void BuildOpcodes::caseStmtBreak(ASTStmtBreak &host, void *param)
 		failure = true;
 		return;
 	}
-	for(list<long>::iterator it = breakRef->begin(); it != breakRef->end(); it++)
+	for(list<long>::reverse_iterator it = breakRef->rbegin(); it != breakRef->rend(); it++)
 	{
 		result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 	    result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(*it)));
-	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP))); 
+	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP)));
 		result.push_back(new ODeallocateMemRegister(new VarArgument(EXP2)));
 	}
 	result.push_back(new OGotoImmediate(new LabelArgument(breaklabelid)));
@@ -926,21 +924,19 @@ void BuildOpcodes::caseStmtContinue(ASTStmtContinue &host, void *param)
 		failure = true;
 		return;
 	}
-	for(list<long>::iterator it = breakRef->begin(); it != breakRef->end(); it++)
+	for(list<long>::reverse_iterator it = breakRef->rbegin(); it != breakRef->rend(); it++)
 	{
 		result.push_back(new OSetRegister(new VarArgument(SFTEMP), new VarArgument(SFRAME)));
 	    result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(*it)));
-	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP))); 
+	    result.push_back(new OLoadIndirect(new VarArgument(EXP2), new VarArgument(SFTEMP)));
 		result.push_back(new ODeallocateMemRegister(new VarArgument(EXP2)));
 	}
 	result.push_back(new OGotoImmediate(new LabelArgument(continuelabelid)));
 }
 /////////////////////////////////////////////////////////////////////////////////
-void LValBOHelper::caseDefault(void *param)
+void LValBOHelper::caseDefault(void *)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  param=param;
-
+	//Shouldn't happen
 	assert(false);
 }
 
@@ -1055,4 +1051,4 @@ void LValBOHelper::caseVarDecl(ASTVarDecl &host, void *param)
 	result.push_back(new OAddImmediate(new VarArgument(SFTEMP), new LiteralArgument(offset)));
 	result.push_back(new OStoreIndirect(new VarArgument(EXP1), new VarArgument(SFTEMP)));
 }
- 
+

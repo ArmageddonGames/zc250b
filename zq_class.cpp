@@ -4840,7 +4840,7 @@ int quest_access(const char *filename, zquestheader *hdr, bool compressed)
 {
 
 	//#define MSVCD_NOFUSSNOMUSS 1
-#if defined _DEBUG && defined _MSC_VER && defined MSVCD_NOFUSSNOMUSS
+#if defined _DEBUG && defined MSVCD_NOFUSSNOMUSS
 	return 1;
 #endif
 

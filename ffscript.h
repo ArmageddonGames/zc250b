@@ -6,6 +6,12 @@
 #include <string>
 #include <list>
 
+// Conditional debugging compilation
+//#define _SCRIPT_COUNTER
+//#define _DEBUGPRINTSCOMMAND
+#define _DEBUGARRAYALLOC
+//#define _DEBUGSCRIPTPOWER
+
 // Defines for script flags
 #define TRUEFLAG          0x0001
 #define MOREFLAG          0x0002
@@ -166,7 +172,7 @@ enum ASM_DEFINE
   LOADEWEAPONV,         //0x0092
   ALLOCATEMEMR,			//0x0093
   ALLOCATEMEMV,			//0x0094
-  DECLARE,				//0x0095
+  ALLOCATEGMEM, //DECLARE,	//0x0095
   DEALLOCATEMEMR,		//0x0096
   DEALLOCATEMEMV,		//0x0097
   WAITDRAW,				//0x0098
@@ -208,7 +214,7 @@ enum ASM_DEFINE
   SETSIDEWARP,			//0x00BC
   SAVE,				//0x00BD
   TRACE6,				//0x00BE
-  PTROFF,				//0x00BF
+  WHATNO0x00BF, //PTROFF,//0x00BF
   QUAD3DR,              //0x00C0
   TRIANGLE3DR,          //0x00C1
   SETCOLORB,        	//0x00C2

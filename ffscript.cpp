@@ -144,83 +144,75 @@ public:
 
 	enum __Error {
 		_NoError,
-		_AllocationError // script array too small
+		_AllocationError, // script array too small
+		_Overflow
 	};
 
-	static int strlen(long stackPtr){
-		byte ref = getramref(stackPtr);
-		int count = 0;
-		for(long i = getarraypointer(stackPtr);
-			scriptRAM[ref][i].value != 0;
-			i = scriptRAM[ref][i].next, count++) ;
+	//Returns a reference to the correct array based on pointer passed
+	static ZScriptArray& getArray(const dword& ptr)
+	{
+		if(ptr >= MAX_ZCARRAY_SIZE)
+			return globalRAM[ptr-MAX_ZCARRAY_SIZE];
+		else
+			return localRAM[ptr];
+	}
+
+	//Can't you get the std::string and then check its length?
+	static int strlen(const dword& ptr)
+	{
+		ZScriptArray& a = getArray(ptr);
+		word count;
+		for(count = 0; a[count] != 0; count++);
 		return count;
 	}
 
-	/* Returns values of a zscript array as an std::string. */
-	static string getString(long stackPtr, int num_chars = 256)
+	//Returns values of a zscript array as an std::string.
+	static string getString(const dword& ptr, word num_chars = 256)
 	{
-		byte ref = getramref(stackPtr);
+		ZScriptArray& a = getArray(ptr);
 		string str;
-		for( long i = getarraypointer(stackPtr);
-			scriptRAM[ref][i].value != 0 && num_chars != 0;
-			i = scriptRAM[ref][i].next )
+		for(word i = 0; a[i] != 0 && num_chars != 0; i++)
 		{
-			if(scriptRAM[ref][i].next == 0xFFFF) return "Failure\n";
-			str += char(scriptRAM[ref][i].value/10000);
+			str += char(a[i]);
 			num_chars--;
 		}
-
 		return str;
 	}
 
-	//Gets an element from a zscript array, returns 0 if it trys to access non-allocated memory
-	static long getElement(long stackPtr, int offset, int ref){
-		int i = getarraypointer(stackPtr);
-		if(i < 0 || i >= 0x8000) return 0;
-		for(int j=0; j<offset &&  scriptRAM[ref][i].next != 0xFFFF; i=scriptRAM[ref][i].next, j++) ;
-		return scriptRAM[ref][i].value;
+	//Get element from array
+	static INLINE long getElement(const dword& ptr, const word& offset)
+	{
+		return getArray(ptr)[offset];
 	}
 
-	//Overloaded to take ramref from the pointer
-	static long getElement(long stackPtr, int offset){
-		return getElement(stackPtr,offset,getramref(stackPtr));
-	}
-
-	//Sets element of zscript array, does nothing for non-valid element
-	static void setElement(long stackPtr, int offset, int ref, long value){
-		int i = getarraypointer(stackPtr);
-		if(i < 0 || i >= 0x8000) return;
-		for(int j=0; j<offset && scriptRAM[ref][i].next != 0xFFFF; i=scriptRAM[ref][i].next, j++) ;
-		scriptRAM[ref][i].value = value;
-	}
-
-	static void setElement(long stackPtr, int offset, long value){
-		return setElement(stackPtr,offset,getramref(stackPtr),value);
+	//Set element in array
+	static INLINE void setElement(const dword& ptr, const word& offset, const long& value)
+	{
+		getArray(ptr)[offset] = value;
 	}
 
 	/* Puts values of a zscript array into a client <type> array. returns 0 on success. Overloaded*/
 template <class T>
-	static int getArray( long stackPtr, int size, T *refArray )
+	static int getArray( const dword& ptr, const word& size, T *refArray )
 	{
-		return getArray( stackPtr, size, 0, 0, 0, refArray );
+		return getArray( ptr, size, 0, 0, 0, refArray );
 	}
 template <class T>
-	static int getArray( long stackPtr, int size, int userOffset, int userStride, int refArrayOffset, T *refArray )
+	static int getArray( const dword& ptr, const word& size, word userOffset, const word& userStride, const word& refArrayOffset, T *refArray )
 	{
-		byte ref = getramref(stackPtr);
-		int j(0), k(userStride);
-		for( long i = getarraypointer(stackPtr);
-			j < size;
-			i = scriptRAM[ref][i].next )
+		ZScriptArray& a = getArray(ptr);
+		word j = 0, k = userStride;
+		for(word i = 0; j < size; i++)
 		{
-			if( scriptRAM[ref][i].next == 0xFFFF )
-				return _AllocationError;
-
-			if( userOffset-- > 0 ) continue;
-			if( k > 0 ) k--;
+			if(i >= a.Size())
+				return _Overflow;
+			if(userOffset-- > 0)
+				continue;
+			if(k > 0)
+				k--;
 			else
 			{
-				refArray[ j + refArrayOffset ] = (T)(scriptRAM[ref][i].value / (T)(10000) );
+				refArray[j+refArrayOffset] = T(a[i]);
 				k = userStride;
 				j++;
 			}
@@ -231,27 +223,26 @@ template <class T>
 
 	/* Puts values of a client <type> array into a zscript array. returns 0 on success. Overloaded*/
 template <class T>
-	static int SetArray( long stackPtr, int size, T *refArray )
+	static int SetArray( const dword& ptr, const word& size, T *refArray )
 	{
-		return SetArray( stackPtr, size, 0, 0, 0, refArray );
+		return SetArray( ptr, size, 0, 0, 0, refArray );
 	}
 template <class T>
-	static int SetArray( long stackPtr, int size, int userOffset, int userStride, int refArrayOffset, T *refArray )
+	static int SetArray( const dword& ptr, const word& size, word userOffset, const word& userStride, const word& refArrayOffset, T *refArray )
 	{
-		byte ref = getramref(stackPtr);
-		int j(0), k(userStride);
-		for( long i = getarraypointer(stackPtr);
-			j < size;
-			i = scriptRAM[ref][i].next )
+		ZScriptArray& a = getArray(ptr);
+		word j = 0, k = userStride;
+		for(word i = 0; j < size; i++)
 		{
-			if( scriptRAM[ref][i].next == 0xFFFF )
-				return _AllocationError;
-
-			if( userOffset-- > 0 ) continue;
-			if( k > 0 ) k--;
+			if(i >= a.Size())
+				return _Overflow; //Resize?
+			if(userOffset-- > 0)
+				continue;
+			if(k > 0)
+				k--;
 			else
 			{
-				scriptRAM[ref][i].value = (long) ( (long)(refArray[ j + refArrayOffset ] / (T)(10000))*10000);
+				a[i] = long( refArray[j+refArrayOffset] / T(10000) ) * 10000;
 				k = userStride;
 				j++;
 			}
@@ -390,7 +381,6 @@ sprite *s;
 
 int get_screenflags(mapscr*,int);
 int get_screeneflags(mapscr*,int);
-//string getzscriptstring(int, refInfo &ri);
 byte flagpos;
 int ornextflag(bool flag);
 
@@ -1549,33 +1539,11 @@ long get_arg(long arg, byte, refInfo &ri)
 	 ret = get_screeneflags(tmpscr,vbound(*ri.d[0]/10000,0,2)); break;
     case SP:
       ret = (*ri.sp)*10000; break;
-	case SCRIPTRAM:
-	{
-	  /*int i = getarraypointer(*(ri.d[0]));
-	  int ref = getramref(*(ri.d[0]));
-	  if(i < 0 || i >= 0x8000) break;
-	  for(int j=0; j<(*(ri.d[1])/10000) && scriptRAM[ref][i].next != 0xFFFF; i=scriptRAM[ref][i].next) ++j;
-	  ret = scriptRAM[ref][i].value;*/
-	  ret = ::ScriptHelper::getElement(*(ri.d[0]),*(ri.d[1])/10000);
-	  break;
-	}
-	case GLOBALRAM:
-	{
-	  /*int i = getarraypointer(*(ri.d[0]));
-	  if(i < 0 || i >= 0x8000) break;
-	  for(int j=0; j<*(ri.d[1])/10000 && scriptRAM[0][i].next != 0xFFFF; i=scriptRAM[0][i].next) ++j;
-	  ret = scriptRAM[0][i].value;*/
-	  ret = ::ScriptHelper::getElement(*(ri.d[0]),*(ri.d[1])/10000,0);
-	  break;
-	}
-	case SCRIPTRAMD:
-	  /*if(getarraypointer(*(ri.d[0])) < 0 || getarraypointer(*(ri.d[0])) >= 0x8000) break;
-	  ret = scriptRAM[getramref(*(ri.d[0]))][getarraypointer(*(ri.d[0]))].value; break;*/
-	  ret = ::ScriptHelper::getElement(*(ri.d[0]),0); break;
-    case GLOBALRAMD:
-	  /*if(getarraypointer(*(ri.d[0])) < 0 || getarraypointer(*(ri.d[0])) >= 0x8000) break;
-	  ret = scriptRAM[0][getarraypointer(*(ri.d[0]))].value; break;*/
-	  ret = ::ScriptHelper::getElement(*(ri.d[0]),0,0); break;
+	case SCRIPTRAM: case GLOBALRAM:
+	  ret = ScriptHelper::getElement(*(ri.d[0])/10000,*(ri.d[1])/10000); break;
+	case SCRIPTRAMD: case GLOBALRAMD:
+	  ret = ScriptHelper::getElement(*(ri.d[0])/10000,0); break;
+
 	case SAVERAM:
 	  if((*(ri.d[0])/10000) < 0 || (*(ri.d[0])/10000) >= 0x2000) break;
 	  ret = game->savedata[*(ri.d[0])/10000]; break;
@@ -3008,33 +2976,11 @@ void set_variable(int arg, byte, long value, refInfo &ri)
       quakeclk=value/10000; break;
     case SP:
       *ri.sp = value/10000; break;
-    case SCRIPTRAM:
-	{
-	  /*int i = getarraypointer(*(ri.d[0]));
-	  int ref = getramref(*(ri.d[0]));
-	  if(i < 0 || i >= 0x8000) break;
-	  for(int j=0; j<(*(ri.d[1])/10000) && scriptRAM[ref][i].next != 0xFFFF; i=scriptRAM[ref][i].next) ++j;
-	  scriptRAM[ref][i].value = value;*/
-	  ::ScriptHelper::setElement(*(ri.d[0]),*(ri.d[1])/10000,value);
-	  break;
-	}
-	case GLOBALRAM:
-	{
-	  /*int i = getarraypointer(*(ri.d[0]));
-	  if(i < 0 || i >= 0x8000) break;
-	  for(int j=0; j<*(ri.d[1])/10000 && scriptRAM[0][i].next != 0xFFFF; i=scriptRAM[0][i].next) ++j;
-	  scriptRAM[0][i].value = value;*/
-	  ::ScriptHelper::setElement(*(ri.d[0]),*(ri.d[1])/10000,0,value);
-	  break;
-	}
-	case SCRIPTRAMD:
-	  /*if(getarraypointer(*(ri.d[0])) < 0 || getarraypointer(*(ri.d[0])) >= 0x8000) break;
-	  scriptRAM[getramref(*(ri.d[0]))][getarraypointer(*(ri.d[0]))].value = value; break;*/
-	  ::ScriptHelper::setElement(*(ri.d[0]),0,value);
-    case GLOBALRAMD:
-	  /*if(getarraypointer(*(ri.d[0])) < 0 || getarraypointer(*(ri.d[0])) >= 0x8000) break;
-	  scriptRAM[0][getarraypointer(*(ri.d[0]))].value = value; break;*/
-	  ::ScriptHelper::setElement(*(ri.d[0]),0,0,value);
+    case SCRIPTRAM: case GLOBALRAM:
+	  ScriptHelper::setElement(*(ri.d[0])/10000, *(ri.d[1])/10000, value); break;
+	case SCRIPTRAMD: case GLOBALRAMD:
+	  ScriptHelper::setElement(*(ri.d[0])/10000, 0, value); break;
+
 	case SAVERAM:
 	  if((*(ri.d[0])/10000) < 0 || (*(ri.d[0])/10000) >= 0x2000) break;
 	  game->savedata[*(ri.d[0])/10000] = value; break;
@@ -3235,11 +3181,12 @@ void do_asin(int, word *, byte i, bool v, refInfo &ri)
 
 void do_acos(int, word *, byte i, bool v, refInfo &ri)
 {
-  double temp = (v?sarg2:get_arg(sarg2,i,ri))/10000.0;
+  double temp = (v ? sarg2: get_arg(sarg2, i, ri) ) / 10000.0;
 
   if(temp >= -1 && temp <= 1)
       set_variable(sarg1,i,long(acos(temp)*10000.0),ri);
-  else{
+  else
+  {
       Z_eventlog("Script attempted to pass %ld into ArcCos!\n",temp);
       set_variable(sarg1,i,-100000,ri);
   }
@@ -3304,7 +3251,7 @@ void do_mult(int, word *, byte i, bool v, refInfo &ri)
   long long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3328,7 +3275,7 @@ void do_div(int, word *, byte i, bool v, refInfo &ri)
   long long temp;
   long long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3384,7 +3331,7 @@ void do_comp(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   /*switch(script_type)
@@ -3435,7 +3382,7 @@ void do_loada(int, word *, byte i, int a, refInfo &ri)
       break;
   }*/
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(a) j = (*(na[1])/10000)-1;
@@ -3479,16 +3426,11 @@ void do_seta(int, word *, byte i, int a, refInfo &ri)
 
 void do_abs(int, word *, byte i, bool, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
- // pc=pc;
-  //v=v;
-
   //long arg1;
   //long arg2;
   long temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   temp=get_arg(sarg1,i,ri);
@@ -3497,17 +3439,12 @@ void do_abs(int, word *, byte i, bool, refInfo &ri)
 
 void do_log10(int, word *, byte i, bool, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
- // pc=pc;
-  //v=v;
-
   //long arg1;
   //long arg2;
   long temp;
   long double temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
   temp = get_arg(sarg1,i,ri);
   if(temp > 0){
@@ -3520,17 +3457,12 @@ void do_log10(int, word *, byte i, bool, refInfo &ri)
 
 void do_naturallog(int, word *, byte i, bool, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
- // pc=pc;
-  //v=v;
-
   //long arg1;
   //long arg2;
   long temp;
   long double temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
   temp = get_arg(sarg1,i,ri);
   if(temp > 0){
@@ -3546,7 +3478,7 @@ void do_min(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3566,7 +3498,7 @@ void do_max(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3589,7 +3521,7 @@ void do_rnd(int , word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3606,15 +3538,11 @@ void do_rnd(int , word *, byte i, bool v, refInfo &ri)
 
 void do_factorial(int, word *, byte i, bool v, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
-
   //long arg1;
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -3642,7 +3570,7 @@ void do_power(int, word *, byte i, bool v, refInfo &ri)
   double temp;
   double temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3664,10 +3592,10 @@ void do_power(int, word *, byte i, bool v, refInfo &ri)
 
   double power = pow((double)temp2,(double)temp);
 
-#ifdef _DEBUG
-  //al_trace( "arg1:%09.9f \n",temp2 );
-  //al_trace( "arg2:%09.9f \n",temp );
-  //al_trace( "result:%09.9f \n \n",power );
+#ifdef _DEBUGSCRIPTPOWER
+  al_trace( "arg1:%09.9f \n",temp2 );
+  al_trace( "arg2:%09.9f \n",temp );
+  al_trace( "result:%09.9f \n \n",power );
 #endif
 
   set_variable(sarg1,i,long( power*10000.0 ),ri);
@@ -3678,7 +3606,7 @@ void do_ipower(int, word *, byte i, bool v, refInfo &ri)
   double temp;
   double temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3699,7 +3627,7 @@ void do_and(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3720,7 +3648,7 @@ void do_or(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3822,14 +3750,10 @@ void do_xnor(int, word *, byte i, bool v, refInfo &ri)
 
 void do_not(int, word *, byte i, bool v, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
-
   //long arg1;
   long temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -3845,14 +3769,10 @@ void do_not(int, word *, byte i, bool v, refInfo &ri)
 
 void do_bitwisenot(int, word *, byte i, bool v, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
-
   //long arg1;
   long temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -3871,7 +3791,7 @@ void do_lshift(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3892,7 +3812,7 @@ void do_rshift(int, word *, byte i, bool v, refInfo &ri)
   long temp;
   long temp2;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3912,7 +3832,7 @@ void do_sqroot(int, word *, byte i, bool v, refInfo &ri)
 {
   double temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
   //arg2 = ffscripts[script][*pc].arg2;
 
   if(v)
@@ -3929,26 +3849,17 @@ void do_sqroot(int, word *, byte i, bool v, refInfo &ri)
 
 void do_message(int, word *, byte i, bool v, refInfo &ri)
 {
-  double temp;
-  if(v)
-  {
-    temp = sarg1;
-  }
-  else
-  {
-    temp = get_arg(sarg1, i,ri);
-  }
-  temp /= 10000.0;
-  int temp2 = (int)temp;
+  word temp = (v ? sarg1: get_arg(sarg1, i, ri)) / 10000;
 
-  if (!temp2)
+  if (temp == 0)
   {
-	dismissmsg();
+    dismissmsg();
     msgfont=zfont;
     blockpath=false;
     Link.finishedmsg();
   }
-  else donewmsg(temp2);
+  else
+	donewmsg(temp);
 }
 
 void do_issolid(int, word *, byte i, refInfo &ri)
@@ -4013,7 +3924,7 @@ void do_triggersecrets(int,word*,byte,refInfo)
 
 void do_combotile(int, word*, byte i, refInfo &ri)
 {
-	int combo = get_arg(sarg2,i,ri)/10000;
+	dword combo = get_arg(sarg2,i,ri) / 10000;
 	set_variable(sarg1,i,combobuf[combo].tile*10000,ri);
 }
 
@@ -4122,20 +4033,9 @@ void do_ewpnusesprite(int, word *, byte i, bool v, refInfo &ri)
 
 void do_clearsprites(int , word *, byte i, bool v, refInfo &ri)
 {
-  double temp;
-  int temp2;
+  word temp = (v ? sarg1: get_arg(sarg1, i, ri)) / 10000;
 
-  if(v)
-  {
-    temp = sarg1;
-  }
-  else
-  {
-    temp=get_arg(sarg1,i,ri);
-  }
-  temp=temp/10000.0;
-  temp2=int(temp);
-  switch (temp2)
+  switch (temp)
   {
     case 0:
       guys.clear();
@@ -4148,7 +4048,7 @@ void do_clearsprites(int , word *, byte i, bool v, refInfo &ri)
       break;
     case 3:
       Lwpns.clear();
-	  Link.reset_hookshot();
+	 Link.reset_hookshot();
       break;
     case 4:
       decorations.clear();
@@ -4161,11 +4061,6 @@ void do_clearsprites(int , word *, byte i, bool v, refInfo &ri)
 
 void do_drawing_command(int script, word *, byte i, int script_command, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
-  //script_command=script_command;
-
   //byte *sp=NULL;
   /*switch(script_type)
   {
@@ -4181,11 +4076,9 @@ void do_drawing_command(int script, word *, byte i, int script_command, refInfo 
   }*/
 #define MAX_DRAWSTRING_SIZE		256
 
-  long temp;
-  long temp2;
+  long temp = get_arg(sarg2,i,ri);
+  long temp2 = get_arg(sarg1,i,ri);
 
-  temp=get_arg(sarg2,i,ri);
-  temp2=get_arg(sarg1,i,ri);
   int j=0;
   for (; j<MAX_SCRIPT_DRAWING_COMMANDS; ++j)
   {
@@ -4485,9 +4378,6 @@ void do_drawing_command(int script, word *, byte i, int script_command, refInfo 
 }
 
 void do_push(int script, word *, byte i, bool v, refInfo &ri) {
-  //these are here to bypass compiler warnings about unused arguments
-  //pc=pc;
-
   /*byte *sp=NULL;
   switch(script_type)
   {
@@ -4515,10 +4405,6 @@ void do_push(int script, word *, byte i, bool v, refInfo &ri) {
 }
 
 void do_pop(int script, word *, byte i, bool, refInfo &ri) {
-  //these are here to bypass compiler warnings about unused arguments
-  //pc=pc;
- // v=v;
-
   /*byte *sp=NULL;
   switch(script_type)
   {
@@ -4538,26 +4424,16 @@ void do_pop(int script, word *, byte i, bool, refInfo &ri) {
 }
 
 void do_loadi(int script, word *, byte i, bool, refInfo &ri) {
-  //these are here to bypass compiler warnings about unused arguments
-  //pc=pc;
-  //v=v;
-
-
-  //long //arg1 = ffscripts[script][*pc].arg1;
-  //long //arg2 = ffscripts[script][*pc].arg2;
+  //long arg1 = ffscripts[script][*pc].arg1;
+  //long arg2 = ffscripts[script][*pc].arg2;
   long sp2 = get_arg(sarg2,i,ri)/10000;
   long val = read_stack(script,i,sp2);
   set_variable(sarg1,i,val,ri);
 }
 
 void do_storei(int script, word *, byte i, bool, refInfo &ri) {
-  //these are here to bypass compiler warnings about unused arguments
-  //pc=pc;
-  //v=v;
-
-
-  //long //arg1 = ffscripts[script][*pc].arg1;
-  //long //arg2 = ffscripts[script][*pc].arg2;
+  //long arg1 = ffscripts[script][*pc].arg1;
+  //long arg2 = ffscripts[script][*pc].arg2;
   long sp2 = get_arg(sarg2,i,ri)/10000;
   long val = get_arg(sarg1,i,ri);
   write_stack(script,i,sp2,val);
@@ -4575,7 +4451,7 @@ void do_sfx(int, word *, byte i, bool v, refInfo &ri)
   //long arg1;
   long temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -4761,9 +4637,6 @@ void do_loadnpc(int , word *, byte i, bool v, refInfo &ri)
 
 void do_createlweapon(int, word *, byte i, bool v, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
 
   /*dword *wpnref=NULL;
   switch(script_type)
@@ -4806,9 +4679,6 @@ void do_createlweapon(int, word *, byte i, bool v, refInfo &ri)
 
 void do_createeweapon(int, word *, byte i, bool v, refInfo &ri)
 {
-  //these are here to bypass compiler warnings about unused arguments
-  //script=script;
-  //pc=pc;
 
   /*dword *wpnref=NULL;
   switch(script_type)
@@ -4908,7 +4778,7 @@ void do_createnpc(int, word *, byte i, bool v, refInfo &ri)
   //long arg1;
   long temp;
 
-  ////arg1 = ffscripts[script][*pc].arg1;
+  //arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -4935,7 +4805,7 @@ void do_trace(int , word *, byte i, bool v, refInfo &ri)
 	//long arg1;
 	long temp;
 
-	////arg1 = ffscripts[script][*pc].arg1;
+	//arg1 = ffscripts[script][*pc].arg1;
 
   if(v)
   {
@@ -4984,7 +4854,8 @@ void do_cleartrace(int,word*,byte,bool,refInfo)
 	zc_trace_clear();
 }
 
-string inttobase(long base, long x, int mindigits){
+string inttobase(const word& base, const long& x, const word& mindigits)
+{
 	char coeff[37] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	string s2;
 	for(int i=zc_max(mindigits-1,int(floor(log((double)x)/log((double)base))));i>=0;i--)
@@ -5268,90 +5139,69 @@ void do_cleartile(int, word *, byte i, bool v, refInfo &ri)
   reset_tile(newtilebuf, temp, newtilebuf[temp].format);
 }
 
-void do_offsetpointer(int, word*, byte i, bool, refInfo &ri)
+void do_allocatemem(int, word *, byte i, bool v, refInfo &ri, bool local)
 {
-  long temp;
+	const dword size = (v ? sarg2: get_arg(sarg2,i,ri)) / 10000;
+	word ptrval;
 
-  //arg1 = ffscripts[script][*pc].arg1;
-  //arg2 = ffscripts[script][*pc].arg2;
-
-  long ptr = (*(ri.d[0]));
-  long offset = (*(ri.d[1]))/10000;
-  temp = (getarraypointer(ptr)+offset)|(getramref(ptr)<<16);
-  set_variable(sarg1,i,temp,ri);
-}
-
-void do_allocatemem(int, word *, byte i, bool v, refInfo &ri)
-{
-	int ref = *ri.ramref;
-	if(ref > 0) if(!scriptRAM_use[ref]) ref = 0; //If it's not being used we have a global
-	long temp;
-
-	if(v) temp = sarg2;
-     else temp=get_arg(sarg2,i,ri);
-     temp /= 10000;
-
-	bool done=false;
-	int j=0;
-	int prev=0xFFFF;
-	int first=0xFFFF;
-	while(!done && j<0x8000)
+	if(local)
 	{
-		for(; scriptRAM[ref][j].used && j<0x8000; ++j) { /* find the first unused scriptRAM slot */ }
-		scriptRAM[ref][j].used=true;
-		scriptRAM[ref][j].value=0;
-		scriptRAM[ref][j].next=0xFFFF;
+				/* v- 0 should be NULL pointer in ZScript. We can handle wasting one container*/
+		for(ptrval = 1; localRAM[ptrval].Size() != 0; ptrval++);
 
-		if(prev!=0xFFFF) scriptRAM[ref][prev].next = j; else first = j;
-		prev=j;
-		if(!(--temp)) done=true;
+		if(ptrval >= MAX_ZCARRAY_SIZE)
+		{
+			al_trace("%d local arrays already in use, no more can be allocated\n", MAX_ZCARRAY_SIZE-1);
+			ptrval = 0;
+		}
+		else
+			localRAM[ptrval].Allocate(size);
 	}
-	if(temp){
-		al_trace("Could not allocate full memory: Requested %ld, max is %d\n", (temp + 0x8000), 0x8000);
-		temp = -1;
+	else
+	{
+		for(ptrval = 0; globalRAM[ptrval].Size() != 0; ptrval++);
+
+		if(ptrval >= globalRAM.size())
+		{
+			al_trace("Invalid pointer value of %d passed to global allocate\n", ptrval);
+			throw "Not enough global array containers allocated";
+		}
+
+		globalRAM[ptrval].Allocate(size);
+		ptrval += MAX_ZCARRAY_SIZE; //so each pointer has a unique value
 	}
-	set_variable(sarg1, i, (ref&0xF)<<16 | (first&0xFFFF), ri);
-}
 
-long getarraypointer(long ptr){
-	return ptr&0xFFFF;
-}
+	set_variable(sarg1, i, ptrval*10000, ri);
 
-int getramref(long ptr){
-	return ptr>>16;
+#ifdef _DEBUGARRAYALLOC
+	al_trace("Allocated %s array of size %d, pointer address %d\n",
+			local ? "local": "global", size, ptrval);
+#endif
 }
-
 
 void do_deallocatemem(int , word* , byte i, bool v, refInfo &ri)
 {
-	long temp = v?sarg1:get_arg(sarg1,i,ri);
-	int ref = getramref(temp);
-	//int ref = *ri.ramref;
-	//if(ref) if(!scriptRAM_use[ref-1]) ref = 0;
+	word ptrval = (v ? sarg1: get_arg(sarg1,i,ri)) / 10000;
 
-	//temp/=10000;
-	temp = getarraypointer(temp);
-
-	int j;
-	for(j=temp; scriptRAM[ref][j].next!=0xFFFF; j=scriptRAM[ref][j].next)
+	if(localRAM[ptrval].Size() == 0 || ptrval >= MAX_ZCARRAY_SIZE)
 	{
-		scriptRAM[ref][j].used=false;
+#ifdef _DEBUGARRAYALLOC
+		al_trace("Tried to deallocate array with address %i\n",ptrval);
+#else
+		al_trace("Script tried to deallocate invalid memory\n");
+#endif
 	}
-	scriptRAM[ref][j].used=false;
-}
-
-void do_declare(int , word* , byte , bool , refInfo &ri)
-{
-	if(!(*ri.ramref))
+	else
 	{
-		for(int i=0; i<15; i++)
-		{
-			if(scriptRAM_use[i] == false)
-			{
-				*ri.ramref = i;
-				break;
-			}
-		}
+#ifdef _DEBUGARRAYALLOC
+		word size = localRAM[ptrval].Size();
+#endif
+
+		localRAM[ptrval].Clear();
+
+#ifdef _DEBUGARRAYALLOC
+		al_trace("Deallocated array with address %i, size %i\n",ptrval,size);
+#endif
 	}
 }
 
@@ -5510,7 +5360,7 @@ script_command command_list[NUMCOMMANDS+1]=
   { "DECLARE",             0,   0,   0,   0},
   { "DEALLOCATEMEMR",      1,   0,   0,   0},
   { "DEALLOCATEMEMV",      1,   1,   0,   0},
-  { "WAITDRAW",		       0,   0,   0,   0},
+  { "WAITDRAW",		  0,   0,   0,   0},
   { "ARCTANR",		       1,   0,   0,   0},
   { "LWPNUSESPRITER",      1,   0,   0,   0},
   { "LWPNUSESPRITEV",      1,   1,   0,   0},
@@ -5528,7 +5378,7 @@ script_command command_list[NUMCOMMANDS+1]=
   { "TRACE2V",             1,   1,   0,   0},
   { "TRACE4",              0,   0,   0,   0},
   { "TRACE5",              0,   0,   0,   0},
-  { "SECRETS",			   0,   0,   0,   0},
+  { "SECRETS",			  0,   0,   0,   0},
   { "DRAWCHAR",            0,   0,   0,   0},
   { "GETSCREENFLAGS",      0,   0,   0,   0},
   { "QUAD",                0,   0,   0,   0},
@@ -5563,12 +5413,14 @@ script_command command_list[NUMCOMMANDS+1]=
 int run_ff_script(int script, byte i)
 {
   //word scommand;
-  //unsigned long script_timer[NUMCOMMANDS];
-  //unsigned long script_execount[NUMCOMMANDS];
-  //for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
-  //unsigned long start_time, end_time;
+#ifdef _SCRIPT_COUNTER
+  unsigned long script_timer[NUMCOMMANDS];
+  unsigned long script_execount[NUMCOMMANDS];
+  for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
+  unsigned long start_time, end_time;
 
-  //script_counter = 0;
+  script_counter = 0;
+#endif
 
   word pc = tmpscr->pc[i];
   scommand = ffscripts[script][pc].command;
@@ -5644,7 +5496,7 @@ int run_ff_script(int script, byte i)
       ri.lwpn = &(tmpscr->lwpnref[i]);
       ri.ewpn = &(tmpscr->ewpnref[i]);
       ri.guyref = &(tmpscr->guyref[i]);
-	  ri.ramref = &(tmpscr->ramref[i]);
+	 ri.ramref = &(tmpscr->ramref[i]);
       ri.gclass = &(tmpscr->guyclass[i]);
       ri.lclass = &(tmpscr->lwpnclass[i]);
       ri.eclass = &(tmpscr->ewpnclass[i]);
@@ -5671,15 +5523,32 @@ int run_ff_script(int script, byte i)
       na[1] = &(tmpscr->a[i][1]);
 	  scriptflag = &sflag;//&(tmpscr->scriptflag[i]);
 
-  //al_trace("Start of script processing:\n");
+
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("\nStart of FFC script processing:\n");
+#endif
 
   bool increment = true;
 
   while( (scommand!=0xFFFF) && (scommand!=WAITFRAME) &&
 	  (ffs != 0) //-Can ffs change during the execution of a script frame? -gleeok
+			   //-Yeah, QUIT sets it to 0 ~Joe123
 	  )
   {
-	//start_time = script_counter;
+	if( key[KEY_F4] && (key[KEY_ALT]||key[KEY_ALTGR]) )
+	{
+		quit_game();
+		exit(101);
+	}
+
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("scommand: %i\n",scommand);
+#endif
+
+#ifdef _SCRIPT_COUNTER
+	start_time = script_counter;
+#endif
+
     switch(scommand)
     {
 	  case SETTRUE:
@@ -5935,8 +5804,7 @@ int run_ff_script(int script, byte i)
         do_storei(script,&pc,i,true,ri); break;
       case GOTOR:
         {
-          long temp = sarg1;
-          int tmp2 = (get_arg(temp,i,ri)/10000)-1;
+          int tmp2 = (get_arg(sarg1,i,ri)/10000)-1;
           pc = tmp2;
           increment = false;
         }
@@ -6053,21 +5921,17 @@ int run_ff_script(int script, byte i)
       case SHIFTTILERR:
         do_shifttile(script, &pc, i, false, false, ri); break;
 	  case ALLOCATEMEMR:
-        do_allocatemem(script, &pc, i, false, ri); break;
+        do_allocatemem(script, &pc, i, false, ri, true); break;
 	  case ALLOCATEMEMV:
-        do_allocatemem(script, &pc, i, true, ri); break;
+        do_allocatemem(script, &pc, i, true, ri, true); break;
 	  case DEALLOCATEMEMR:
         do_deallocatemem(script, &pc, i, false, ri); break;
 	  case DEALLOCATEMEMV:
         do_deallocatemem(script, &pc, i, true, ri); break;
-	  case DECLARE:
-	    do_declare(script, &pc, i, true, ri); break;
 	  case SAVE:
 	    save_game(false); break;
 	  case ARCTANR:
 		do_arctan(script, &pc, i, false, ri); break;
-	  case PTROFF:
-		do_offsetpointer(script, &pc, i, false, ri); break;
 	  case SETCOLORB:
 	  case SETDEPTHB:
 	  case GETCOLORB:
@@ -6081,26 +5945,21 @@ int run_ff_script(int script, byte i)
 	  case COMBOTILE:
 		do_combotile(script, &pc, i, ri); break;
     }
-	//end_time=script_counter;
-	//script_timer[*command] += end_time-start_time;
-	//++script_execount[*command];
-    if(increment)
-    {
-      pc+=1;
-    }
+
+#ifdef _SCRIPT_COUNTER
+	end_time=script_counter;
+	script_timer[*command] += end_time-start_time;
+	++script_execount[*command];
+#endif
+
+	if(increment)
+		pc++;
 	else
-	{
 		increment = true;
-		if( key[KEY_F4] && (key[KEY_ALT]||key[KEY_ALTGR]) )
-		{
-		  quit_game();
-		  exit(101);
-		}
-	}
 
 	scommand = ffscripts[script][pc].command;
-    sarg1 = ffscripts[script][pc].arg1;
-    sarg2 = ffscripts[script][pc].arg2;
+     sarg1 = ffscripts[script][pc].arg1;
+     sarg2 = ffscripts[script][pc].arg2;
     /*switch(script_type)
     {
       case SCRIPT_FFC:
@@ -6123,38 +5982,34 @@ int run_ff_script(int script, byte i)
   tmpscr->pc[i] = pc;
   tmpscr->ffscript[i] = ffs;
   if(scommand==0xFFFF)
-  {
-    tmpscr->ffscript[i] = 0;
-  }
+	tmpscr->ffscript[i] = 0;
   else
-  {
-    tmpscr->pc[i]+=1;
-  }
-  if(tmpscr->ffscript[i] == 0 && (*ri.ramref) != 0)
-  {
-    for(int i2=0; i2<0x8000; i2++) scriptRAM[*ri.ramref][i2].used = false;
-	scriptRAM_use[(*ri.ramref)-1] = false;
-    *ri.ramref = 0;
-  }
+	tmpscr->pc[i]++;
 
-  /*for(int j=0; j<NUMCOMMANDS; j++)
+#ifdef _SCRIPT_COUNTER
+  for(int j=0; j<NUMCOMMANDS; j++)
   {
 	  if(script_execount[j] != 0)
 		  al_trace("Command %s took %ld ticks in all to complete in %ld executions.\n", command_list[j].name, script_timer[j], script_execount[j]);
-  }*/
-  //remove_int(update_script_counter);
+  }
+  remove_int(update_script_counter);
+#endif
+
   return 0;
 }
 
 int run_item_script(int script, byte i)
 {
-  //word scommand;
-  //unsigned long script_timer[NUMCOMMANDS];
-  //unsigned long script_execount[NUMCOMMANDS];
-  //for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
-  //unsigned long start_time, end_time;
+  word scommand;
 
-  //script_counter = 0;
+#ifdef _SCRIPT_COUNTER
+  unsigned long script_timer[NUMCOMMANDS];
+  unsigned long script_execount[NUMCOMMANDS];
+  for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
+  unsigned long start_time, end_time;
+
+  script_counter = 0;
+#endif
 
   word pc = items.spr(i)->pc;
   scommand = itemscripts[script][pc].command;
@@ -6257,18 +6112,29 @@ int run_item_script(int script, byte i)
       na[1] = &(items.spr(i)->a[1]);
 	  scriptflag = &sflag;//&(items.spr(i)->scriptflag);
 
-  //al_trace("Start of script processing:\n");
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("\nStart of Item script processing:\n");
+#endif
 
   bool increment = true;
 
   while(ffs != 0 && (scommand!=0xFFFF)&&(scommand!=WAITFRAME))
   {
+
     if((key[KEY_ALT]||key[KEY_ALTGR])&&key[KEY_F4])
     {
       quit_game();
       exit(101);
     }
-	//start_time = script_counter;
+
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("scommand: %i\n",scommand);
+#endif
+
+#ifdef _SCRIPT_COUNTER
+	start_time = script_counter;
+#endif
+
     switch(scommand)
     {
 	  case SETTRUE:
@@ -6642,21 +6508,17 @@ int run_item_script(int script, byte i)
       case SHIFTTILERR:
         do_shifttile(script, &pc, i, false, false, ri); break;
 	  case ALLOCATEMEMR:
-        do_allocatemem(script, &pc, i, false, ri); break;
+        do_allocatemem(script, &pc, i, false, ri, true); break;
 	  case ALLOCATEMEMV:
-        do_allocatemem(script, &pc, i, true, ri); break;
+        do_allocatemem(script, &pc, i, true, ri, true); break;
 	  case DEALLOCATEMEMR:
         do_deallocatemem(script, &pc, i, false, ri); break;
 	  case DEALLOCATEMEMV:
         do_deallocatemem(script, &pc, i, true, ri); break;
-	  case DECLARE:
-	    do_declare(script, &pc, i, true, ri); break;
 	  case SAVE:
 	    save_game(false); break;
 	  case ARCTANR:
 		do_arctan(script, &pc, i, false, ri); break;
-	  case PTROFF:
-		do_offsetpointer(script, &pc, i, false, ri); break;
 	  case SETCOLORB:
 	  case SETDEPTHB:
 	  case GETCOLORB:
@@ -6669,17 +6531,22 @@ int run_item_script(int script, byte i)
 	  case COMBOTILE:
 		do_combotile(script,&pc,i,ri); break;
     }
-	//end_time=script_counter;
-	//script_timer[*command] += end_time-start_time;
-	//++script_execount[*command];
+
+#ifdef _SCRIPT_COUNTER
+	end_time=script_counter;
+	script_timer[*command] += end_time-start_time;
+	++script_execount[*command];
+#endif
+
     if(increment)
-    {
-      pc+=1;
-    }
-    increment = true;
+		pc++;
+    else
+		increment = true;
+
     scommand = itemscripts[script][pc].command;
     sarg1 = itemscripts[script][pc].arg1;
     sarg2 = itemscripts[script][pc].arg2;
+
     /*switch(script_type)
     {
       case SCRIPT_FFC:
@@ -6709,21 +6576,16 @@ int run_item_script(int script, byte i)
   {
     items.spr(i)->pc+=1;
   }
-  if(items.spr(i)->doscript == 0 && (*ri.ramref) != 0)
-  {
-    for(int i2=0; i2<0x8000; i2++)
-    {
-      scriptRAM[*ri.ramref][i2].used = false;
-    }
-    scriptRAM_use[(*ri.ramref)-1] = false;
-    *ri.ramref = 0;
-  }
-  /*for(int j=0; j<NUMCOMMANDS; j++)
+
+#ifdef _SCRIPT_COUNTER
+  for(int j=0; j<NUMCOMMANDS; j++)
   {
 	  if(script_execount[j] != 0)
 		  al_trace("Command %s took %ld ticks in all to complete in %ld executions.\n", command_list[j].name, script_timer[j], script_execount[j]);
-  }*/
-  //remove_int(update_script_counter);
+  }
+  remove_int(update_script_counter);
+#endif
+
   return 0;
 }
 
@@ -6731,18 +6593,22 @@ int run_global_script(int script)
 {
   byte i=0;
   //word scommand;
-  //unsigned long script_timer[NUMCOMMANDS];
-  //unsigned long script_execount[NUMCOMMANDS];
-  //for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
-  //unsigned long start_time, end_time;
 
-  //script_counter = 0;
+#ifdef _SCRIPT_COUNTER
+  unsigned long script_timer[NUMCOMMANDS];
+  unsigned long script_execount[NUMCOMMANDS];
+  for(int j=0; j<NUMCOMMANDS; j++) { script_timer[j]=0; script_execount[j]=0; }
+  unsigned long start_time, end_time;
+
+  script_counter = 0;
+#endif
 
   // fuck..this happens
 #ifdef _DEBUG //TODO: remove me
-	  if(g_pc>=0xffff) {
+	  if(g_pc>=0xffff)
+	  {
 		  al_trace( "g_pc increment past 0xFFFE. val: (%d)\n", g_pc );
-		  al_trace( "scommand: %d \n script: %d \n", scommand, script );
+		  al_trace( "scommand: %d \nscript: %d \n", scommand, script );
 		  al_trace( "Fatal\n" );
 		  return 1; //No recovery
 	  }
@@ -6845,15 +6711,29 @@ int run_global_script(int script)
       na[1] = NULL;
 	  scriptflag = &g_scriptflag;
 
-  //al_trace("Start of script processing:\n");
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("\nStart of Global script processing:\n");
+#endif
 
   bool increment = true;
   global_wait=false;
 
   while( g_doscript != 0 && (scommand!=0xFFFF) && (scommand!=WAITFRAME) && (scommand!=WAITDRAW))
   {
+	if( key[KEY_F4] && (key[KEY_ALT]||key[KEY_ALTGR]) )
+	{
+		quit_game();
+		exit(101);
+	}
 
-	//start_time = script_counter;
+#ifdef _DEBUGPRINTSCOMMAND
+	al_trace("scommand: %i\n",scommand);
+#endif
+
+#ifdef _SCRIPT_COUNTER
+	start_time = script_counter;
+#endif
+
     switch(scommand)
     {
 	  case SETTRUE:
@@ -7227,9 +7107,11 @@ int run_global_script(int script)
       case SHIFTTILERR:
         do_shifttile(script, &g_pc, i, false, false, ri); break;
 	  case ALLOCATEMEMR:
-        do_allocatemem(script, &g_pc, i, false, ri); break;
+        do_allocatemem(script, &g_pc, i, false, ri, true); break;
 	  case ALLOCATEMEMV:
-        do_allocatemem(script, &g_pc, i, true, ri); break;
+        do_allocatemem(script, &g_pc, i, true, ri, true); break;
+	  case ALLOCATEGMEM:
+	   do_allocatemem(script, &g_pc, i, true, ri, false); break;
 	  case DEALLOCATEMEMR:
         do_deallocatemem(script, &g_pc, i, false, ri); break;
 	  case DEALLOCATEMEMV:
@@ -7238,8 +7120,8 @@ int run_global_script(int script)
 	    save_game(false); break;
 	  case ARCTANR:
 		do_arctan(script, &g_pc, i, false, ri); break;
-	  case PTROFF:
-		do_offsetpointer(script, &g_pc, i, false, ri); break;
+	  /*case PTROFF:
+		do_offsetpointer(script, &g_pc, i, false, ri); break;*/
 	  case SETCOLORB:
 	  case SETDEPTHB:
 	  case GETCOLORB:
@@ -7252,26 +7134,21 @@ int run_global_script(int script)
 	  case COMBOTILE:
 		do_combotile(script,&g_pc,i,ri); break;
     }
-	//end_time=script_counter;
-	//script_timer[*command] += end_time-start_time;
-	//++script_execount[*command];
-    if(increment)
-    {
-      g_pc+=1;
-    }
+
+#ifdef _SCRIPT_COUNTER
+	end_time=script_counter;
+	script_timer[*command] += end_time-start_time;
+	++script_execount[*command];
+#endif
+
+	if(increment)
+		g_pc++;
 	else
-	{
 		increment = true;
-		if( key[KEY_F4] && (key[KEY_ALT]||key[KEY_ALTGR]) )
-		{
-		  quit_game();
-		  exit(101);
-		}
-	}
 
 	scommand = globalscripts[script][g_pc].command;
-    sarg1 = globalscripts[script][g_pc].arg1;
-    sarg2 = globalscripts[script][g_pc].arg2;
+	sarg1 = globalscripts[script][g_pc].arg1;
+	sarg2 = globalscripts[script][g_pc].arg2;
     /*switch(script_type)
     {
       case SCRIPT_FFC:
@@ -7291,21 +7168,23 @@ int run_global_script(int script)
         break;
     }*/
   }
+
   if(scommand==0xFFFF)
-  {
     g_doscript = 0;
-  }
   else
-  {
-    g_pc+=1;
-  }
+    g_pc++;
+
   if(scommand==WAITDRAW) global_wait=true;
-  /*for(int j=0; j<NUMCOMMANDS; j++)
+
+#ifdef _SCRIPT_COUNTER
+  for(int j=0; j<NUMCOMMANDS; j++)
   {
 	  if(script_execount[j] != 0)
 		  al_trace("Command %s took %ld ticks to complete in %ld executions.\n", command_list[j].name, script_timer[j], script_execount[j]);
-  }*/
-  //remove_int(update_script_counter);
+  }
+  remove_int(update_script_counter);
+#endif
+
   return 0;
 }
 

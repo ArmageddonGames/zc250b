@@ -17,6 +17,7 @@
 
 #include <vector>
 #include "zdefs.h"
+#include "zc_array.h"
 #include "zc_sys.h"
 #include "zeldadat.h"
 #include "sfx.h"
@@ -245,8 +246,7 @@ extern int    Bpos;
 extern byte screengrid[22];
 extern byte ffcgrid[4];
 extern volatile int logic_counter;
-//#define SCRIPT_COUNTER // Apparantly, it's affecting my framerate... -L
-#ifdef SCRIPT_COUNTER
+#ifdef _SCRIPT_COUNTER
 extern volatile int script_counter;
 #endif
 extern bool halt;
@@ -257,7 +257,7 @@ extern int gui_colorset;
 extern int fullscreen;
 extern byte disable_triplebuffer,can_triplebuffer_in_windowed_mode;
 
-#ifdef SCRIPT_COUNTER
+#ifdef _SCRIPT_COUNTER
 void update_script_counter();
 #endif
 
@@ -318,8 +318,14 @@ extern ffscript *linkscripts[3];
 extern ffscript *screenscripts[256];
 extern SAMPLE customsfxdata[WAV_COUNT];
 extern int sfxdat;
-extern RAMvalue scriptRAM[16][0x8000];
-extern bool scriptRAM_use[15];
+
+#define MAX_ZCARRAY_SIZE	4096
+typedef ZCArray<long> ZScriptArray;
+//extern ZCArray<ZScriptArray> globalRAM;
+extern std::vector<ZScriptArray> globalRAM;
+extern ZScriptArray localRAM[MAX_ZCARRAY_SIZE];
+
+dword getNumGlobalArrays();
 
 extern int  resx,resy,scrx,scry;
 extern bool sbig;                                           // big screen

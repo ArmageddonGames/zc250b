@@ -1281,6 +1281,11 @@ string OAllocateMemImmediate::toString()
 	return "ALLOCATEMEMV " + getFirstArgument()->toString() + "," + getSecondArgument()->toString();
 }
 
+string OAllocateGlobalMem::toString()
+{
+	return "ALLOCATEGMEM " + getFirstArgument()->toString() + "," + getSecondArgument()->toString();
+}
+
 string ODeallocateMemRegister::toString()
 {
 	return "DEALLOCATEMEMR " + getArgument()->toString();

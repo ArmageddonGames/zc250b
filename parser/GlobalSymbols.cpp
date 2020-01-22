@@ -230,8 +230,8 @@ static AccessorTable GlobalTable[] =
   { "SetScriptRAM",           ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,        ScriptParser::TYPE_FLOAT,         -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
   { "GetGlobalRAM",           ScriptParser::TYPE_FLOAT,         FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,        -1,                               -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
   { "SetGlobalRAM",           ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,        ScriptParser::TYPE_FLOAT,         -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
-  { "Declare",                ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      { -1,                               -1,                               -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
-  { "PointerOffset",          ScriptParser::TYPE_FLOAT,         FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,        ScriptParser::TYPE_FLOAT,         -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
+ // { "Declare",                ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      { -1,                               -1,                               -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
+ // { "PointerOffset",          ScriptParser::TYPE_FLOAT,         FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,        ScriptParser::TYPE_FLOAT,         -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1                           } },
   { "SetColorBuffer",            ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,	    ScriptParser::TYPE_FLOAT,         ScriptParser::TYPE_FLOAT,     ScriptParser::TYPE_FLOAT,    -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,   					   -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                          } },
   { "SetDepthBuffer",            ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,	    ScriptParser::TYPE_FLOAT,         ScriptParser::TYPE_FLOAT,     ScriptParser::TYPE_FLOAT,    -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,   					   -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                          } },
   { "GetColorBuffer",            ScriptParser::TYPE_VOID,          FUNCTION,     0,                    1,      {  ScriptParser::TYPE_FLOAT,	    ScriptParser::TYPE_FLOAT,         ScriptParser::TYPE_FLOAT,     ScriptParser::TYPE_FLOAT,    -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,     				   -1,   					   -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                           -1,                          } },
@@ -721,7 +721,7 @@ map<int, vector<Opcode *> > GlobalSymbols::addSymbolsCode(LinkTable &lt)
 		code.push_back(new OGotoRegister(new VarArgument(EXP2)));
 		rval[label] = code;
 	}
-	//void Declare()
+	/*//void Declare()
 	{
 		id = memberids["Declare"];
 		int label = lt.functionToLabel(id);
@@ -732,8 +732,8 @@ map<int, vector<Opcode *> > GlobalSymbols::addSymbolsCode(LinkTable &lt)
 		code.push_back(new OPopRegister(new VarArgument(EXP2)));
 		code.push_back(new OGotoRegister(new VarArgument(EXP2)));
 		rval[label]=code;
-	}
-	//int PointerOffset(int *ptr, int offset)
+	}*/
+	/*//int PointerOffset(int *ptr, int offset)
 	{
 		id = memberids["PointerOffset"];
 		int label = lt.functionToLabel(id);
@@ -746,7 +746,7 @@ map<int, vector<Opcode *> > GlobalSymbols::addSymbolsCode(LinkTable &lt)
 		code.push_back(new OPopRegister(new VarArgument(EXP2)));
 		code.push_back(new OGotoRegister(new VarArgument(EXP2)));
 		rval[label]=code;
-	}
+	}*/
 	//void SetColorBuffer(int amount, int offset, int stride, int *ptr)
 	{
 		id = memberids["SetColorBuffer"];

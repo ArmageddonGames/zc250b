@@ -92,7 +92,7 @@ void update_logic_counter()
   ++logic_counter;
 } END_OF_FUNCTION(update_logic_counter)
 
-#ifdef SCRIPT_COUNTER
+#ifdef _SCRIPT_COUNTER
 volatile int script_counter=0;
 void update_script_counter()
 {
@@ -299,11 +299,33 @@ extern byte g_sp;
 extern word g_pc;
 extern word g_doscript;
 
-RAMvalue scriptRAM[16][0x8000];
-bool scriptRAM_use[15] = {false, false, false, false,
-              false, false, false, false,
-              false, false, false, false,
-              false, false, false};
+//ZScript array storage
+//ZCArray<ZScriptArray> globalRAM;
+std::vector<ZScriptArray> globalRAM;
+ZScriptArray localRAM[MAX_ZCARRAY_SIZE];
+
+void initZScriptArrayRAM()
+{
+	for(word i = 0; i < MAX_ZCARRAY_SIZE; i++)
+		localRAM[i].Clear();
+	globalRAM.clear();
+	globalRAM.resize(getNumGlobalArrays());
+}
+
+dword getNumGlobalArrays()
+{
+	word scommand, i = 0, ret = 0;
+	do
+	{
+		scommand = globalscripts[3][i].command;
+		if(scommand == ALLOCATEGMEM)
+			ret++;
+		i++;
+	}
+	while(scommand != 0xFFFF);
+
+	return ret;
+}
 
 //movingblock mblock2; //mblock[4]?
 //LinkClass   Link;
@@ -449,7 +471,7 @@ FONT *setmsgfont()
   }
 }
 
-void donewmsg(int str) 
+void donewmsg(int str)
 {
 	//al_trace("donewmsg %d\n",str);
 	if (msg_onscreen || msg_active)
@@ -788,11 +810,13 @@ int load_quest(gamedata *g, bool report)
     game_pal();
   }
 
-  for(int i=0; i<16; i++)
+  /*for(int i=0; i<16; i++)
   {
     memset(scriptRAM[i],0,sizeof(RAMvalue)*0x8000);
   if(i<15) scriptRAM_use[i] = false;
-  }
+  }*/
+
+  initZScriptArrayRAM();
 
   return ret;
 }
@@ -1138,6 +1162,7 @@ int init_game()
   global_guy=0;
   global_ram=0;
 
+  initZScriptArrayRAM();
   return 0;
 }
 
@@ -1646,7 +1671,7 @@ void do_magic_casting()
         Link.setNayrusLoveShieldClk(itemsbuf[magicitem].misc1);
         if (get_bit(quest_rules,qr_MORESOUNDS))
 		{
-			if (nayruitem != -1) 
+			if (nayruitem != -1)
 			{
 			  stop_sfx(itemsbuf[nayruitem].usesound+1);
 			  stop_sfx(itemsbuf[nayruitem].usesound);
@@ -2345,7 +2370,7 @@ int main(int argc, char* argv[])
   LOCK_VARIABLE(logic_counter);
   LOCK_FUNCTION(update_logic_counter);
   install_int_ex(update_logic_counter, BPS_TO_TIMER(60));
-#ifdef SCRIPT_COUNTER
+#ifdef _SCRIPT_COUNTER
   LOCK_VARIABLE(script_counter);
   LOCK_FUNCTION(update_script_counter);
   install_int_ex(update_script_counter, 1);
@@ -2817,8 +2842,6 @@ int main(int argc, char* argv[])
   game=(gamedata *)malloc(sizeof(gamedata));
   memset(game, 0, sizeof(gamedata));
 
-
-
   while(Quit!=qEXIT)
   {
     // this is here to continually fix they keyboard repeat
@@ -2944,7 +2967,7 @@ void remove_installed_timers()
   al_trace("Removing timers. \n");
   remove_int(update_logic_counter);
   Z_remove_timers();
-#ifdef SCRIPT_COUNTER
+#ifdef _SCRIPT_COUNTER
   remove_int(update_script_counter);
 #endif
 

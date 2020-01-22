@@ -1417,6 +1417,14 @@ public:
 	Opcode *clone() {return new OAllocateMemImmediate(a->clone(),b->clone());}
 };
 
+class OAllocateGlobalMem : public BinaryOpcode
+{
+public:
+	OAllocateGlobalMem(Argument *A, Argument *B) : BinaryOpcode(A,B) {}
+	string toString();
+	Opcode *clone() {return new OAllocateGlobalMem(a->clone(),b->clone());}
+};
+
 class ODeallocateMemRegister : public UnaryOpcode
 {
 public:
